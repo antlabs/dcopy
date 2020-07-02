@@ -19,6 +19,7 @@ var copyTab = setFuncTab{
 	reflect.Uint16: setUint16,
 	reflect.Uint32: setUint32,
 	reflect.Uint64: setUint64,
+	reflect.String: setString,
 }
 
 func getSetFunc(t reflect.Kind) setFunc {
@@ -64,4 +65,8 @@ func setUint32(dstAddr, srcAddr unsafe.Pointer) {
 
 func setUint64(dstAddr, srcAddr unsafe.Pointer) {
 	*(*uint64)(dstAddr) = *(*uint64)(srcAddr)
+}
+
+func setString(dstAddr, srcAddr unsafe.Pointer) {
+	*(*string)(dstAddr) = *(*string)(srcAddr)
 }

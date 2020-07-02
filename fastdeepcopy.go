@@ -7,6 +7,11 @@ import (
 	"unsafe"
 )
 
+type emptyInterface struct {
+	typ  *struct{}
+	word unsafe.Pointer
+}
+
 type fastDeepCopy struct {
 	dstValue reflect.Value
 	srcValue reflect.Value
@@ -40,7 +45,10 @@ func (f *fastDeepCopy) Do() error {
 	if f.err != nil {
 		return f.err
 	}
-	return f.fastDeepCopy(f.dstValue.Elem().Type(), f.srcValue.Elem().Type(), unsafe.Pointer(f.dstValue.Elem().UnsafeAddr()), unsafe.Pointer(f.srcValue.Elem().UnsafeAddr()))
+
+	return f.fastDeepCopy(f.dstValue.Elem().Type(), f.srcValue.Elem().Type(),
+		unsafe.Pointer(f.dstValue.Elem().UnsafeAddr()),
+		unsafe.Pointer(f.srcValue.Elem().UnsafeAddr()))
 }
 
 func (f *fastDeepCopy) cpyDefault(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer) error {
@@ -65,7 +73,60 @@ func (f *fastDeepCopy) cpyPtr(dst, src reflect.Type, dstAddr, srcAddr unsafe.Poi
 	return nil
 }
 
+func (f *fastDeepCopy) cpySliceArray(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer) error {
+	if dst.Kind() != reflect.Slice {
+		return nil
+	}
+
+	dstSliceHeader := (*reflect.SliceHeader)(dstAddr)
+	srcSliceHeader := (*reflect.SliceHeader)(srcAddr)
+
+	if srcSliceHeader.Len == 0 {
+		return nil
+	}
+
+	if dstSliceHeader.Cap == 0 {
+		// reflect.MakeSlice是不能取得UnsafeAddr()的指针的
+		newAddrInterface := reflect.MakeSlice(src, srcSliceHeader.Len, srcSliceHeader.Len).Interface()
+		slicePtr := (*emptyInterface)(unsafe.Pointer(&newAddrInterface)).word
+		newSliceHeader := (*reflect.SliceHeader)(slicePtr)
+		dstSliceHeader.Data = newSliceHeader.Data
+		dstSliceHeader.Len = newSliceHeader.Len
+		dstSliceHeader.Cap = newSliceHeader.Cap
+	}
+
+	l := srcSliceHeader.Len
+	if dstSliceHeader.Cap < l {
+		l = dstSliceHeader.Cap
+	}
+
+	elemType := dst.Elem()
+	for i := 0; i < l; i++ {
+		dstElemAddr := unsafe.Pointer(uintptr(dstSliceHeader.Data) + uintptr(i)*elemType.Size())
+		srcElemAddr := unsafe.Pointer(uintptr(srcSliceHeader.Data) + uintptr(i)*elemType.Size())
+		err := f.fastDeepCopy(src.Elem(), dst.Elem(), dstElemAddr, srcElemAddr)
+		if err != nil {
+			return err
+		}
+	}
+
+	dstSliceHeader.Len = l
+	return nil
+}
+
 func (f *fastDeepCopy) cpyStruct(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer) error {
+	/*
+		dstLen := dst.NumField()
+		dstMap := make(map[string]*reflect.StructField, dstLen)
+		for i := 0; i < dstLen; i++ {
+			sf := dst.Field(i)
+			if sf.PkgPath != "" && !sf.Anonymous {
+				continue
+			}
+
+			dstMap[sf.Name] = &sf
+		}
+	*/
 
 	n := src.NumField()
 	for i := 0; i < n; i++ {
@@ -75,6 +136,7 @@ func (f *fastDeepCopy) cpyStruct(dst, src reflect.Type, dstAddr, srcAddr unsafe.
 			continue
 		}
 
+		//dstSf, ok := dstMap[sf.Name]
 		dstSf, ok := dst.FieldByName(sf.Name)
 		if !ok {
 			continue
@@ -99,6 +161,8 @@ func (f *fastDeepCopy) fastDeepCopy(dst, src reflect.Type, dstAddr, srcAddr unsa
 		return f.cpyStruct(dst, src, dstAddr, srcAddr)
 	case reflect.Ptr:
 		return f.cpyPtr(dst, src, dstAddr, srcAddr)
+	case reflect.Slice:
+		return f.cpySliceArray(dst, src, dstAddr, srcAddr)
 	default:
 		return f.cpyDefault(dst, src, dstAddr, srcAddr)
 	}
