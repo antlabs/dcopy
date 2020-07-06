@@ -73,44 +73,118 @@ func (f *fastDeepCopy) cpyPtr(dst, src reflect.Type, dstAddr, srcAddr unsafe.Poi
 	return nil
 }
 
+func getHeader(typ reflect.Type, addr unsafe.Pointer) *reflect.SliceHeader {
+	var header reflect.SliceHeader
+	if typ.Kind() == reflect.Array {
+		header.Data = uintptr(addr)
+		header.Len = typ.Len()
+		header.Cap = typ.Len()
+		return &header
+	}
+
+	return (*reflect.SliceHeader)(addr)
+
+}
+
+// 支持异构copy, slice to slice, array to slice, slice to array
 func (f *fastDeepCopy) cpySliceArray(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer) error {
-	if dst.Kind() != reflect.Slice {
+
+	if dst.Kind() == reflect.Array && dst.Len() == 0 || dst.Kind() != reflect.Array && dst.Kind() != reflect.Slice {
 		return nil
 	}
 
-	dstSliceHeader := (*reflect.SliceHeader)(dstAddr)
-	srcSliceHeader := (*reflect.SliceHeader)(srcAddr)
+	srcHeader := getHeader(src, srcAddr)
+	dstHeader := getHeader(dst, dstAddr)
 
-	if srcSliceHeader.Len == 0 {
+	if srcHeader.Len == 0 {
 		return nil
 	}
 
-	if dstSliceHeader.Cap == 0 {
-		// reflect.MakeSlice是不能取得UnsafeAddr()的指针的
-		newAddrInterface := reflect.MakeSlice(src, srcSliceHeader.Len, srcSliceHeader.Len).Interface()
-		slicePtr := (*emptyInterface)(unsafe.Pointer(&newAddrInterface)).word
-		newSliceHeader := (*reflect.SliceHeader)(slicePtr)
-		dstSliceHeader.Data = newSliceHeader.Data
-		dstSliceHeader.Len = newSliceHeader.Len
-		dstSliceHeader.Cap = newSliceHeader.Cap
+	if dstHeader.Cap == 0 {
+		newAddr := reflect.MakeSlice(src, srcHeader.Len, srcHeader.Cap).Pointer()
+		dstHeader.Data = newAddr
+		dstHeader.Len = srcHeader.Len
+		dstHeader.Cap = srcHeader.Cap
 	}
 
-	l := srcSliceHeader.Len
-	if dstSliceHeader.Cap < l {
-		l = dstSliceHeader.Cap
+	l := srcHeader.Len
+	if dstHeader.Cap < l {
+		l = dstHeader.Cap
 	}
 
 	elemType := dst.Elem()
 	for i := 0; i < l; i++ {
-		dstElemAddr := unsafe.Pointer(uintptr(dstSliceHeader.Data) + uintptr(i)*elemType.Size())
-		srcElemAddr := unsafe.Pointer(uintptr(srcSliceHeader.Data) + uintptr(i)*elemType.Size())
+		dstElemAddr := unsafe.Pointer(uintptr(dstHeader.Data) + uintptr(i)*elemType.Size())
+		srcElemAddr := unsafe.Pointer(uintptr(srcHeader.Data) + uintptr(i)*elemType.Size())
 		err := f.fastDeepCopy(src.Elem(), dst.Elem(), dstElemAddr, srcElemAddr)
 		if err != nil {
 			return err
 		}
 	}
 
-	dstSliceHeader.Len = l
+	dstHeader.Len = l
+	return nil
+}
+
+// 使用type + address 转成 reflect.Value
+func typePtrToValue(typ reflect.Type, addr unsafe.Pointer) reflect.Value {
+	i := reflect.New(typ).Interface()
+	ei := (*emptyInterface)(unsafe.Pointer(&i))
+	ei.word = addr
+	return reflect.ValueOf(i).Elem()
+}
+
+func getPtrFromInterface(addr unsafe.Pointer) unsafe.Pointer {
+	ei := (*emptyInterface)(addr)
+	return ei.word
+}
+
+func getPtrFromVal(v *reflect.Value) unsafe.Pointer {
+	ei := (*emptyInterface)(unsafe.Pointer(v))
+	return ei.word
+}
+
+func (f *fastDeepCopy) cpyMap(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer) error {
+	if dst.Kind() != reflect.Map || src.Kind() != reflect.Map {
+		return nil
+	}
+
+	// 检查value是否相同
+	if dst.Elem().Kind() != src.Elem().Kind() {
+		return nil
+	}
+
+	// 检查key是否相同
+	if dst.Key().Kind() != src.Key().Kind() {
+		return nil
+	}
+
+	dstVal := typePtrToValue(dst, dstAddr)
+	srcVal := typePtrToValue(src, srcAddr)
+
+	if dstVal.IsNil() {
+		newMap := reflect.MakeMapWithSize(src, srcVal.Len())
+		dstVal.Set(newMap)
+	}
+
+	iter := srcVal.MapRange()
+	for iter.Next() {
+		k := iter.Key()
+		v := iter.Value()
+
+		newKey := reflect.New(k.Type()).Elem()
+		if err := f.fastDeepCopy(newKey.Type(), k.Type(), getPtrFromVal(&newKey), getPtrFromVal(&k)); err != nil {
+			return err
+		}
+
+		newVal := reflect.New(v.Type()).Elem()
+		if err := f.fastDeepCopy(newVal.Type(), v.Type(), getPtrFromVal(&newVal), getPtrFromVal(&v)); err != nil {
+			return err
+		}
+
+		dstVal.SetMapIndex(newKey, newVal)
+	}
+
 	return nil
 }
 
@@ -148,6 +222,26 @@ func (f *fastDeepCopy) cpyStruct(dst, src reflect.Type, dstAddr, srcAddr unsafe.
 			return err
 		}
 	}
+
+	return nil
+}
+
+func (f *fastDeepCopy) cpyInterface(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer) error {
+	if dst.Kind() != src.Kind() {
+		return nil
+	}
+
+	dstAddr = getPtrFromInterface(dstAddr)
+	srcAddr = getPtrFromInterface(srcAddr)
+	src = src.Elem()
+	newDst := reflect.New(src).Elem()
+
+	newDstTyp := newDst.Type()
+
+	f.fastDeepCopy(newDstTyp, src, dstAddr, srcAddr)
+
+	dstVal := typePtrToValue(dst, dstAddr)
+	dstVal.Set(newDst)
 	return nil
 }
 
@@ -157,13 +251,19 @@ func (f *fastDeepCopy) fastDeepCopy(dst, src reflect.Type, dstAddr, srcAddr unsa
 	}
 
 	switch src.Kind() {
+	case reflect.Slice, reflect.Array:
+		return f.cpySliceArray(dst, src, dstAddr, srcAddr)
+	case reflect.Map:
+		return f.cpyMap(dst, src, dstAddr, srcAddr)
 	case reflect.Struct:
 		return f.cpyStruct(dst, src, dstAddr, srcAddr)
+	case reflect.Interface:
+		return f.cpyInterface(dst, src, dstAddr, srcAddr)
 	case reflect.Ptr:
 		return f.cpyPtr(dst, src, dstAddr, srcAddr)
-	case reflect.Slice:
-		return f.cpySliceArray(dst, src, dstAddr, srcAddr)
 	default:
 		return f.cpyDefault(dst, src, dstAddr, srcAddr)
 	}
+
+	return nil
 }

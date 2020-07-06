@@ -6,6 +6,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type testCase struct {
+	need interface{}
+	got  interface{}
+}
+
 type dstTestData struct {
 	ID    int
 	Int8  int8
@@ -13,12 +18,14 @@ type dstTestData struct {
 	Int32 int32
 	Int64 int64
 
-	Uint8       uint8
-	Uint16      uint16
-	Uint32      uint32
-	Uint64      uint64
-	S           string
-	StringSlice []string
+	Uint8        uint8
+	Uint16       uint16
+	Uint32       uint32
+	Uint64       uint64
+	S            string
+	StringSlice  []string
+	StringArray  [3]string
+	SliceToArray [4]int
 }
 
 type srcTestData struct {
@@ -28,18 +35,19 @@ type srcTestData struct {
 	Int32 int32
 	Int64 int64
 
-	Uint8       uint8
-	Uint16      uint16
-	Uint32      uint32
-	Uint64      uint64
-	S           string
-	StringSlice []string
+	Uint8        uint8
+	Uint16       uint16
+	Uint32       uint32
+	Uint64       uint64
+	S            string
+	StringSlice  []string
+	StringArray  [4]string
+	SliceToArray []int
 }
 
 func Test_FastDeepCopy(t *testing.T) {
 	var dst dstTestData
 	var src srcTestData
-	//dst.StringSlice = make([]string, 0, 2)
 
 	src.ID = 3
 	src.Int8 = 8
@@ -53,6 +61,8 @@ func Test_FastDeepCopy(t *testing.T) {
 	src.Uint64 = 164
 	src.S = "hello"
 	src.StringSlice = []string{"hello", "world"}
+	src.StringArray = [4]string{"1", "2", "3", "4"}
+	src.SliceToArray = []int{1, 2, 3, 4, 5}
 
 	err := Copy(&dst, &src).Do()
 	assert.NoError(t, err)
@@ -68,5 +78,7 @@ func Test_FastDeepCopy(t *testing.T) {
 	assert.Equal(t, dst.Uint64, uint64(164))
 	assert.Equal(t, dst.S, "hello")
 	assert.Equal(t, dst.StringSlice, []string{"hello", "world"})
+	assert.Equal(t, dst.StringArray, [3]string{"1", "2", "3"})
+	assert.Equal(t, dst.SliceToArray, [4]int{1, 2, 3, 4})
 
 }
