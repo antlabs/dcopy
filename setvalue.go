@@ -9,24 +9,31 @@ type setFunc func(dstAddr, srcAddr unsafe.Pointer)
 type setFuncTab map[reflect.Kind]setFunc
 
 var copyTab = setFuncTab{
-	reflect.Int:     setInt,
-	reflect.Int8:    setInt8,
-	reflect.Int16:   setInt16,
-	reflect.Int32:   setInt32,
-	reflect.Int64:   setInt64,
-	reflect.Uint:    setUint,
-	reflect.Uint8:   setUint8,
-	reflect.Uint16:  setUint16,
-	reflect.Uint32:  setUint32,
-	reflect.Uint64:  setUint64,
-	reflect.String:  setString,
-	reflect.Float32: setFloat32,
-	reflect.Float64: setFloat64,
+	reflect.Bool:       setBool,
+	reflect.Int:        setInt,
+	reflect.Int8:       setInt8,
+	reflect.Int16:      setInt16,
+	reflect.Int32:      setInt32,
+	reflect.Int64:      setInt64,
+	reflect.Uint:       setUint,
+	reflect.Uint8:      setUint8,
+	reflect.Uint16:     setUint16,
+	reflect.Uint32:     setUint32,
+	reflect.Uint64:     setUint64,
+	reflect.String:     setString,
+	reflect.Float32:    setFloat32,
+	reflect.Float64:    setFloat64,
+	reflect.Complex64:  setComplex64,
+	reflect.Complex128: setComplex128,
 }
 
 func getSetFunc(t reflect.Kind) setFunc {
 	f, _ := copyTab[t]
 	return f
+}
+
+func setBool(dstAddr, srcAddr unsafe.Pointer) {
+	*(*bool)(dstAddr) = *(*bool)(srcAddr)
 }
 
 func setInt(dstAddr, srcAddr unsafe.Pointer) {
@@ -79,4 +86,12 @@ func setFloat32(dstAddr, srcAddr unsafe.Pointer) {
 
 func setFloat64(dstAddr, srcAddr unsafe.Pointer) {
 	*(*float64)(dstAddr) = *(*float64)(srcAddr)
+}
+
+func setComplex64(dstAddr, srcAddr unsafe.Pointer) {
+	*(*complex64)(dstAddr) = *(*complex64)(srcAddr)
+}
+
+func setComplex128(dstAddr, srcAddr unsafe.Pointer) {
+	*(*complex128)(dstAddr) = *(*complex128)(srcAddr)
 }
