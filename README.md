@@ -139,14 +139,4 @@ func main() {
 
 ```
 ## 性能
-从零实现的fastdeepcopy相比deepcopy序列化与反序列化方式拥有更好的性能
-```
-goos: linux
-goarch: amd64
-pkg: github.com/antlabs/fastdeepcopy
-Benchmark_MiniCopy-12    	  243212	      4987 ns/op
-Benchmark_DeepCopy-12    	  273775	      4781 ns/op
-PASS
-ok  	github.com/antlabs/fastdeepcopy	4.496s
-
-```
+TODO 下个版本再优化性能
