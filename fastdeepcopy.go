@@ -12,13 +12,6 @@ const (
 	noTagLimit     = ""
 )
 
-type visit struct {
-	addr uintptr
-	typ  reflect.Type
-}
-
-var ErrCircularReference = errors.New("deepcopy.Copy:Circular reference")
-
 type emptyInterface struct {
 	typ  *struct{}
 	word unsafe.Pointer
@@ -31,7 +24,6 @@ type fastDeepCopy struct {
 
 	tagName  string
 	maxDepth int
-	//visited  map[visit]struct{}
 }
 
 func Copy(dst, src interface{}) *fastDeepCopy {
@@ -270,22 +262,6 @@ func (f *fastDeepCopy) cpyStruct(dst, src reflect.Type, dstAddr, srcAddr unsafe.
 
 	return nil
 }
-
-// 检查循环引用
-/*
-func (f *fastDeepCopy) checkCycle(typ reflect.Type, addr unsafe.Pointer) error {
-
-	v := visit{addr: uintptr(addr), typ: typ}
-
-	if _, ok := f.visited[v]; ok {
-		return ErrCircularReference
-	}
-
-	f.visited[v] = struct{}{}
-
-	return nil
-}
-*/
 
 func (f *fastDeepCopy) cpyInterface(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer, depth int) error {
 	if dst.Kind() != src.Kind() {
