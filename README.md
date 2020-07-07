@@ -3,6 +3,7 @@
 [![codecov](https://codecov.io/gh/antlabs/fastdeepcopy/branch/master/graph/badge.svg)](https://codecov.io/gh/antlabs/fastdeepcopy)
 
 fastdeepcopy.Copy主要用于两个类型间的深度拷贝[从零实现]
+
 和deepcopy功能上没有区别，使用了一些hack手段提升性能
 
 

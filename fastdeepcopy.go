@@ -31,7 +31,7 @@ type fastDeepCopy struct {
 
 	tagName  string
 	maxDepth int
-	visited  map[visit]struct{}
+	//visited  map[visit]struct{}
 }
 
 func Copy(dst, src interface{}) *fastDeepCopy {
@@ -58,7 +58,7 @@ func Copy(dst, src interface{}) *fastDeepCopy {
 		maxDepth: noDepthLimited,
 		dstValue: dstValue,
 		srcValue: srcValue,
-		visited:  make(map[visit]struct{}, 10),
+		//visited:  make(map[visit]struct{}, 10),
 	}
 }
 
@@ -256,9 +256,11 @@ func (f *fastDeepCopy) cpyStruct(dst, src reflect.Type, dstAddr, srcAddr unsafe.
 			continue
 		}
 		srcFieldAddr := unsafe.Pointer(uintptr(srcAddr) + sf.Offset)
-		if err := f.checkCycle(sf.Type, srcFieldAddr); err != nil {
-			return err
-		}
+		/*
+			if err := f.checkCycle(sf.Type, srcFieldAddr); err != nil {
+				return err
+			}
+		*/
 
 		err := f.fastDeepCopy(dstSf.Type, sf.Type, unsafe.Pointer(uintptr(dstAddr)+dstSf.Offset), srcFieldAddr, depth+1)
 		if err != nil {
@@ -270,6 +272,7 @@ func (f *fastDeepCopy) cpyStruct(dst, src reflect.Type, dstAddr, srcAddr unsafe.
 }
 
 // 检查循环引用
+/*
 func (f *fastDeepCopy) checkCycle(typ reflect.Type, addr unsafe.Pointer) error {
 
 	v := visit{addr: uintptr(addr), typ: typ}
@@ -282,6 +285,7 @@ func (f *fastDeepCopy) checkCycle(typ reflect.Type, addr unsafe.Pointer) error {
 
 	return nil
 }
+*/
 
 func (f *fastDeepCopy) cpyInterface(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer, depth int) error {
 	if dst.Kind() != src.Kind() {
