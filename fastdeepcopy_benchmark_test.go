@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/antlabs/deepcopy"
-	jsoniter "github.com/json-iterator/go"
 )
 
 type testData struct {
@@ -40,25 +39,10 @@ func defaultTestData() (src testData) {
 
 var td = defaultTestData()
 
-func use_jsoniters(dst, src interface{}) error {
-	bytes, err := jsoniter.Marshal(src)
-	if err != nil {
-		return err
-	}
-	return jsoniter.Unmarshal(bytes, dst)
-}
-
 func Benchmark_Use_Ptr_fastdeepcopy(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		var dst testData
 		Copy(&dst, &td).Do()
-	}
-}
-
-func Benchmark_Use_Ptr_jsoniter(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		var dst testData
-		use_jsoniters(&dst, &td)
 	}
 }
 
