@@ -76,12 +76,22 @@ func (f *fastDeepCopy) Do() error {
 		return f.err
 	}
 
-	return f.fastDeepCopy(f.dstValue.Elem().Type(), f.srcValue.Elem().Type(),
-		unsafe.Pointer(f.dstValue.Elem().UnsafeAddr()),
-		unsafe.Pointer(f.srcValue.Elem().UnsafeAddr()), 0)
+	arg := argsPool.Get().(*args)
+	defer argsPool.Put(arg)
+
+	arg.dstType = f.dstValue.Elem().Type()
+	arg.srcType = f.srcValue.Elem().Type()
+	arg.dstAddr = unsafe.Pointer(f.dstValue.Elem().UnsafeAddr())
+	arg.srcAddr = unsafe.Pointer(f.srcValue.Elem().UnsafeAddr())
+
+	return f.fastDeepCopy(arg, 0)
 }
 
-func (f *fastDeepCopy) cpyDefault(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer, depth int) error {
+func (f *fastDeepCopy) cpyDefault(a *args, depth int) error {
+	dst := a.dstType
+	src := a.srcType
+	dstAddr := a.dstAddr
+	srcAddr := a.srcAddr
 	if dst.Kind() != src.Kind() {
 		return nil
 	}
@@ -95,15 +105,27 @@ func (f *fastDeepCopy) cpyDefault(dst, src reflect.Type, dstAddr, srcAddr unsafe
 	return nil
 }
 
-func (f *fastDeepCopy) cpyPtr(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer, depth int) error {
+func (f *fastDeepCopy) cpyPtr(a *args, depth int) error {
+	dst := a.dstType
+	src := a.srcType
+
 	if dst.Kind() != src.Kind() {
 		return nil
 	}
 
-	dst = dst.Elem()
-	src = src.Elem()
+	arg := argsPool.Get().(*args)
+	defer argsPool.Put(arg)
 
-	return f.fastDeepCopy(dst, src, dstAddr, srcAddr, depth)
+	arg.dstType = dst.Elem()
+	arg.srcType = src.Elem()
+	arg.dstAddr = a.dstAddr
+	arg.srcAddr = a.srcAddr
+
+	//dst = dst.Elem()
+	//src = src.Elem()
+
+	return f.fastDeepCopy(arg, depth)
+
 }
 
 func getHeader(typ reflect.Type, addr unsafe.Pointer) *reflect.SliceHeader {
@@ -120,8 +142,12 @@ func getHeader(typ reflect.Type, addr unsafe.Pointer) *reflect.SliceHeader {
 }
 
 // 支持异构copy, slice to slice, array to slice, slice to array
-func (f *fastDeepCopy) cpySliceArray(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer, depth int) error {
+func (f *fastDeepCopy) cpySliceArray(a *args, depth int) error {
 
+	dst := a.dstType
+	src := a.srcType
+	dstAddr := a.dstAddr
+	srcAddr := a.srcAddr
 	if dst.Kind() == reflect.Array && dst.Len() == 0 || dst.Kind() != reflect.Array && dst.Kind() != reflect.Slice {
 		return nil
 	}
@@ -149,10 +175,22 @@ func (f *fastDeepCopy) cpySliceArray(dst, src reflect.Type, dstAddr, srcAddr uns
 	for i := 0; i < l; i++ {
 		dstElemAddr := unsafe.Pointer(uintptr(dstHeader.Data) + uintptr(i)*elemType.Size())
 		srcElemAddr := unsafe.Pointer(uintptr(srcHeader.Data) + uintptr(i)*elemType.Size())
-		err := f.fastDeepCopy(src.Elem(), dst.Elem(), dstElemAddr, srcElemAddr, depth)
+
+		err := func() error {
+			arg := argsPool.Get().(*args)
+			defer argsPool.Put(arg)
+
+			arg.dstType = dst.Elem()
+			arg.srcType = src.Elem()
+			arg.dstAddr = dstElemAddr
+			arg.srcAddr = srcElemAddr
+			return f.fastDeepCopy(arg, depth)
+		}()
+
 		if err != nil {
 			return err
 		}
+
 	}
 
 	dstHeader.Len = l
@@ -172,7 +210,12 @@ func getPtrFromVal(v *reflect.Value) unsafe.Pointer {
 	return ei.word
 }
 
-func (f *fastDeepCopy) cpyMap(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer, depth int) error {
+func (f *fastDeepCopy) cpyMap(a *args, depth int) error {
+	dst := a.dstType
+	src := a.srcType
+	dstAddr := a.dstAddr
+	srcAddr := a.srcAddr
+
 	if dst.Kind() != reflect.Map || src.Kind() != reflect.Map {
 		return nil
 	}
@@ -201,12 +244,34 @@ func (f *fastDeepCopy) cpyMap(dst, src reflect.Type, dstAddr, srcAddr unsafe.Poi
 		v := iter.Value()
 
 		newKey := reflect.New(k.Type()).Elem()
-		if err := f.fastDeepCopy(newKey.Type(), k.Type(), getPtrFromVal(&newKey), getPtrFromVal(&k), depth); err != nil {
+		err := func() error {
+			arg := argsPool.Get().(*args)
+			defer argsPool.Put(arg)
+
+			arg.dstType = newKey.Type()
+			arg.srcType = k.Type()
+			arg.dstAddr = getPtrFromVal(&newKey)
+			arg.srcAddr = getPtrFromVal(&k)
+
+			return f.fastDeepCopy(arg, depth)
+		}()
+		if err != nil {
 			return err
 		}
 
 		newVal := reflect.New(v.Type()).Elem()
-		if err := f.fastDeepCopy(newVal.Type(), v.Type(), getPtrFromVal(&newVal), getPtrFromVal(&v), depth); err != nil {
+
+		err = func() error {
+			arg := argsPool.Get().(*args)
+			defer argsPool.Put(arg)
+
+			arg.dstType = newVal.Type()
+			arg.srcType = v.Type()
+			arg.dstAddr = getPtrFromVal(&newVal)
+			arg.srcAddr = getPtrFromVal(&v)
+			return f.fastDeepCopy(arg, depth)
+		}()
+		if err != nil {
 			return err
 		}
 
@@ -216,45 +281,45 @@ func (f *fastDeepCopy) cpyMap(dst, src reflect.Type, dstAddr, srcAddr unsafe.Poi
 	return nil
 }
 
-func (f *fastDeepCopy) cpyStruct(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer, depth int) error {
-	/*
-		dstLen := dst.NumField()
-		dstMap := make(map[string]*reflect.StructField, dstLen)
-		for i := 0; i < dstLen; i++ {
-			sf := dst.Field(i)
-			if sf.PkgPath != "" && !sf.Anonymous {
-				continue
-			}
+func (f *fastDeepCopy) cpyStruct(a *args, depth int) error {
 
-			dstMap[sf.Name] = &sf
-		}
-	*/
+	dst := a.dstType
+	src := a.srcType
+	dstAddr := a.dstAddr
+	srcAddr := a.srcAddr
 
 	n := src.NumField()
 	for i := 0; i < n; i++ {
 
-		sf := src.Field(i)
-		if sf.PkgPath != "" && !sf.Anonymous {
-			continue
-		}
-
-		if len(f.tagName) > 0 && !haveTagName(sf.Tag.Get(f.tagName)) {
-			continue
-		}
-
-		//dstSf, ok := dstMap[sf.Name]
-		dstSf, ok := dst.FieldByName(sf.Name)
-		if !ok {
-			continue
-		}
-		srcFieldAddr := unsafe.Pointer(uintptr(srcAddr) + sf.Offset)
-		/*
-			if err := f.checkCycle(sf.Type, srcFieldAddr); err != nil {
-				return err
+		err := func() error {
+			sf := src.Field(i)
+			if sf.PkgPath != "" && !sf.Anonymous {
+				return nil
 			}
-		*/
 
-		err := f.fastDeepCopy(dstSf.Type, sf.Type, unsafe.Pointer(uintptr(dstAddr)+dstSf.Offset), srcFieldAddr, depth+1)
+			if len(f.tagName) > 0 && !haveTagName(sf.Tag.Get(f.tagName)) {
+				return nil
+			}
+
+			dstSf, ok := dst.FieldByName(sf.Name)
+			if !ok {
+				return nil
+			}
+
+			srcFieldAddr := unsafe.Pointer(uintptr(srcAddr) + sf.Offset)
+			dstFieldAddr := unsafe.Pointer(uintptr(dstAddr) + dstSf.Offset)
+
+			arg := argsPool.Get().(*args)
+			defer argsPool.Put(arg)
+
+			arg.dstType = dstSf.Type
+			arg.srcType = sf.Type
+			arg.dstAddr = dstFieldAddr
+			arg.srcAddr = srcFieldAddr
+
+			return f.fastDeepCopy(arg, depth+1)
+		}()
+
 		if err != nil {
 			return err
 		}
@@ -263,7 +328,12 @@ func (f *fastDeepCopy) cpyStruct(dst, src reflect.Type, dstAddr, srcAddr unsafe.
 	return nil
 }
 
-func (f *fastDeepCopy) cpyInterface(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer, depth int) error {
+func (f *fastDeepCopy) cpyInterface(a *args, depth int) error {
+	dst := a.dstType
+	src := a.srcType
+	dstAddr := a.dstAddr
+	srcAddr := a.srcAddr
+
 	if dst.Kind() != src.Kind() {
 		return nil
 	}
@@ -276,7 +346,17 @@ func (f *fastDeepCopy) cpyInterface(dst, src reflect.Type, dstAddr, srcAddr unsa
 	newDst := reflect.New(srcVal.Type()).Elem()
 
 	if srcVal.CanAddr() {
-		f.fastDeepCopy(newDst.Type(), srcVal.Type(), unsafe.Pointer(newDst.UnsafeAddr()), unsafe.Pointer(srcVal.UnsafeAddr()), depth)
+		arg := argsPool.Get().(*args)
+		defer argsPool.Put(arg)
+
+		arg.dstType = newDst.Type()
+		arg.srcType = srcVal.Type()
+		arg.dstAddr = unsafe.Pointer(newDst.UnsafeAddr())
+		arg.srcAddr = unsafe.Pointer(srcVal.UnsafeAddr())
+
+		if err := f.fastDeepCopy(arg, depth); err != nil {
+			return err
+		}
 	}
 
 	newDst.Set(srcVal)
@@ -285,7 +365,7 @@ func (f *fastDeepCopy) cpyInterface(dst, src reflect.Type, dstAddr, srcAddr unsa
 	return nil
 }
 
-func (f *fastDeepCopy) fastDeepCopy(dst, src reflect.Type, dstAddr, srcAddr unsafe.Pointer, depth int) error {
+func (f *fastDeepCopy) fastDeepCopy(a *args, depth int) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -294,19 +374,19 @@ func (f *fastDeepCopy) fastDeepCopy(dst, src reflect.Type, dstAddr, srcAddr unsa
 		return nil
 	}
 
-	switch src.Kind() {
+	switch a.srcType.Kind() {
 	case reflect.Slice, reflect.Array:
-		return f.cpySliceArray(dst, src, dstAddr, srcAddr, depth)
+		return f.cpySliceArray(a, depth)
 	case reflect.Map:
-		return f.cpyMap(dst, src, dstAddr, srcAddr, depth)
+		return f.cpyMap(a, depth)
 	case reflect.Struct:
-		return f.cpyStruct(dst, src, dstAddr, srcAddr, depth)
+		return f.cpyStruct(a, depth)
 	case reflect.Interface:
-		return f.cpyInterface(dst, src, dstAddr, srcAddr, depth)
+		return f.cpyInterface(a, depth)
 	case reflect.Ptr:
-		return f.cpyPtr(dst, src, dstAddr, srcAddr, depth)
+		return f.cpyPtr(a, depth)
 	default:
-		return f.cpyDefault(dst, src, dstAddr, srcAddr, depth)
+		return f.cpyDefault(a, depth)
 	}
 
 	return nil
