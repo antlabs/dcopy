@@ -24,6 +24,8 @@ type fastDeepCopy struct {
 
 	tagName  string
 	maxDepth int
+
+	af *allFieldFunc
 }
 
 func Copy(dst, src interface{}) *fastDeepCopy {
@@ -50,7 +52,6 @@ func Copy(dst, src interface{}) *fastDeepCopy {
 		maxDepth: noDepthLimited,
 		dstValue: dstValue,
 		srcValue: srcValue,
-		//visited:  make(map[visit]struct{}, 10),
 	}
 }
 
@@ -84,6 +85,16 @@ func (f *fastDeepCopy) Do() error {
 	arg.dstAddr = unsafe.Pointer(f.dstValue.Elem().UnsafeAddr())
 	arg.srcAddr = unsafe.Pointer(f.srcValue.Elem().UnsafeAddr())
 
+	if OpenCache {
+		if ok := getSetFromCacheAndRun(arg); ok {
+			return nil
+		}
+
+		defer func() {
+			saveToCache(arg, f.af)
+		}()
+	}
+
 	return f.fastDeepCopy(arg, 0)
 }
 
@@ -101,7 +112,16 @@ func (f *fastDeepCopy) cpyDefault(a *args, depth int) error {
 		return nil
 	}
 
+	//fmt.Printf("%t:dst:%v:%v:%p:%s:%v\n", OpenCache, dst, src, a.offsetAndFunc, a.srcName, f.srcValue.Type())
 	set(dstAddr, srcAddr)
+	if OpenCache {
+		if f.af == nil {
+			f.af = newAllFieldFunc()
+		}
+
+		a.set = set
+		f.af.append(a)
+	}
 	return nil
 }
 
@@ -316,6 +336,13 @@ func (f *fastDeepCopy) cpyStruct(a *args, depth int) error {
 			arg.srcType = sf.Type
 			arg.dstAddr = dstFieldAddr
 			arg.srcAddr = srcFieldAddr
+			if OpenCache {
+				arg.srcName = sf.Name
+				arg.offsetAndFunc = &offsetAndFunc{
+					dstOffset: int(dstSf.Offset),
+					srcOffset: int(sf.Offset),
+				}
+			}
 
 			return f.fastDeepCopy(arg, depth+1)
 		}()

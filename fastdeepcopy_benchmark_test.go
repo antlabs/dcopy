@@ -18,7 +18,7 @@ type testData struct {
 	Uint32 uint32
 	Uint64 uint64
 	S      string
-	Slice  []string
+	//Slice  []string
 }
 
 func defaultTestData() (src testData) {
@@ -33,13 +33,25 @@ func defaultTestData() (src testData) {
 	src.Uint32 = 132
 	src.Uint64 = 164
 	src.S = "hello world"
-	src.Slice = []string{"123", "456", "789"}
+	//src.Slice = []string{"123", "456", "789"}
 	return
 }
 
 var td = defaultTestData()
 
 func Benchmark_Use_Ptr_fastdeepcopy(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		var dst testData
+		Copy(&dst, &td).Do()
+	}
+}
+
+func Benchmark_Use_Ptr_fastdeepcopy_Cache(b *testing.B) {
+	OpenCache = true
+	defer func() {
+		OpenCache = false
+	}()
+
 	for i := 0; i < b.N; i++ {
 		var dst testData
 		Copy(&dst, &td).Do()
