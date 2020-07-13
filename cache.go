@@ -22,6 +22,7 @@ type allFieldFunc struct {
 }
 
 type offsetAndFunc struct {
+	srcKind   reflect.Kind
 	dstOffset int
 	srcOffset int
 
@@ -44,7 +45,7 @@ func getSetFromCacheAndRun(a *args) (exist bool) {
 	}
 	rdlock.RUnlock()
 
-	cacheFunc.do(a.dstAddr, a.srcAddr)
+	cacheFunc.do(0, a.dstAddr, a.srcAddr)
 	return true
 }
 
@@ -61,8 +62,15 @@ func (af *allFieldFunc) append(a *args) {
 	af.fieldFuncs = append(af.fieldFuncs, fieldFunc)
 }
 
-func (c *allFieldFunc) do(dstAddr, srcAddr unsafe.Pointer) {
-	for _, v := range c.fieldFuncs {
-		v.set(add(dstAddr, v.dstOffset), add(srcAddr, v.srcOffset))
+func (c *allFieldFunc) do(start int, dstAddr, srcAddr unsafe.Pointer) {
+	for k, v := range c.fieldFuncs[start:] {
+		switch v.srcKind {
+		case reflect.Array, reflect.Slice:
+			c.do(k+1, add(dstAddr, v.dstOffset), add(srcAddr, v.srcOffset))
+			return
+		default:
+			//fmt.Printf("%d:%d:%p:%p:%v\n", v.dstOffset, v.srcOffset, add(dstAddr, v.dstOffset), add(srcAddr, v.srcOffset), v.srcKind)
+			v.set(add(dstAddr, v.dstOffset), add(srcAddr, v.srcOffset))
+		}
 	}
 }

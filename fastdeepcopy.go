@@ -99,6 +99,7 @@ func (f *fastDeepCopy) Do() error {
 }
 
 func (f *fastDeepCopy) cpyDefault(a *args, depth int) error {
+
 	dst := a.dstType
 	src := a.srcType
 	dstAddr := a.dstAddr
@@ -191,6 +192,12 @@ func (f *fastDeepCopy) cpySliceArray(a *args, depth int) error {
 		l = dstHeader.Cap
 	}
 
+	if OpenCache {
+		arg2 := argsPool.Get().(*args)
+		arg2.offsetAndFunc = a.offsetAndFunc
+		f.af.append(arg2)
+	}
+
 	elemType := dst.Elem()
 	for i := 0; i < l; i++ {
 		dstElemAddr := unsafe.Pointer(uintptr(dstHeader.Data) + uintptr(i)*elemType.Size())
@@ -204,6 +211,13 @@ func (f *fastDeepCopy) cpySliceArray(a *args, depth int) error {
 			arg.srcType = src.Elem()
 			arg.dstAddr = dstElemAddr
 			arg.srcAddr = srcElemAddr
+			if OpenCache {
+				arg.offsetAndFunc = &offsetAndFunc{
+					srcKind:   elemType.Kind(),
+					dstOffset: int(elemType.Size()) * i,
+					srcOffset: int(elemType.Size()) * i,
+				}
+			}
 			return f.fastDeepCopy(arg, depth)
 		}()
 
@@ -339,6 +353,7 @@ func (f *fastDeepCopy) cpyStruct(a *args, depth int) error {
 			if OpenCache {
 				arg.srcName = sf.Name
 				arg.offsetAndFunc = &offsetAndFunc{
+					srcKind:   sf.Type.Kind(),
 					dstOffset: int(dstSf.Offset),
 					srcOffset: int(sf.Offset),
 				}

@@ -18,6 +18,7 @@ type testData struct {
 	Uint32 uint32
 	Uint64 uint64
 	S      string
+	Array  [4]int //相同尺寸数据
 	//Slice  []string
 }
 
@@ -33,6 +34,7 @@ func defaultTestData() (src testData) {
 	src.Uint32 = 132
 	src.Uint64 = 164
 	src.S = "hello world"
+	src.Array = [4]int{1, 2, 3}
 	//src.Slice = []string{"123", "456", "789"}
 	return
 }

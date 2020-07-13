@@ -18,6 +18,10 @@ type testCacheData struct {
 	Uint32 uint32
 	Uint64 uint64
 	S      string
+	Array  [4]int //相同尺寸数据
+	//slice 拷贝 slice
+	//slice 对 array
+	//array 对 slice
 }
 
 func defaultTestCacheData() (src testCacheData) {
@@ -32,6 +36,7 @@ func defaultTestCacheData() (src testCacheData) {
 	src.Uint32 = 132
 	src.Uint64 = 164
 	src.S = "hello world"
+	src.Array = [4]int{1, 2, 3}
 	return
 }
 
@@ -56,4 +61,5 @@ func Test_Cache(t *testing.T) {
 	assert.Equal(t, dst.Uint32, uint32(132))
 	assert.Equal(t, dst.Uint64, uint64(164))
 	assert.Equal(t, dst.S, "hello world")
+	assert.Equal(t, dst.Array, [4]int{1, 2, 3})
 }
