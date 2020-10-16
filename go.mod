@@ -1,4 +1,4 @@
-module github.com/antlabs/fastdeepcopy
+module github.com/antlabs/dcopy
 
 go 1.14
 

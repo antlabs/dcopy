@@ -1,4 +1,4 @@
-package fastdeepcopy
+package dcopy
 
 import (
 	"testing"
@@ -41,14 +41,14 @@ func defaultTestData() (src testData) {
 
 var td = defaultTestData()
 
-func Benchmark_Use_Ptr_fastdeepcopy(b *testing.B) {
+func Benchmark_Use_Ptr_dcopy(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		var dst testData
 		Copy(&dst, &td).Do()
 	}
 }
 
-func Benchmark_Use_Ptr_fastdeepcopy_Cache(b *testing.B) {
+func Benchmark_Use_Ptr_dcopy_Cache(b *testing.B) {
 	OpenCache = true
 	defer func() {
 		OpenCache = false
