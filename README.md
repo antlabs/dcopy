@@ -1,8 +1,8 @@
 ## 作用
-[![Go](https://github.com/antlabs/fastdeepcopy/workflows/Go/badge.svg)](https://github.com/antlabs/fastdeepcopy/actions)
-[![codecov](https://codecov.io/gh/antlabs/fastdeepcopy/branch/master/graph/badge.svg)](https://codecov.io/gh/antlabs/fastdeepcopy)
+[![Go](https://github.com/antlabs/dcopy/workflows/Go/badge.svg)](https://github.com/antlabs/dcopy/actions)
+[![codecov](https://codecov.io/gh/antlabs/dcopy/branch/master/graph/badge.svg)](https://codecov.io/gh/antlabs/dcopy)
 
-fastdeepcopy.Copy主要用于两个类型间的深度拷贝[从零实现]
+dcopy.Copy主要用于两个类型间的深度拷贝[从零实现]
 
 和deepcopy功能上没有区别，使用了一些hack手段提升性能
 
@@ -25,7 +25,7 @@ fastdeepcopy.Copy主要用于两个类型间的深度拷贝[从零实现]
 
 ## Installation
 ```
-go get github.com/antlabs/fastdeepcopy
+go get github.com/antlabs/dcopy
 ```
 
 ## Quick start
@@ -34,7 +34,7 @@ package main
 
 import (
     "fmt"
-    "github.com/antlabs/fastdeepcopy"
+    "github.com/antlabs/dcopy"
 )
 
 type dst struct {
@@ -48,7 +48,7 @@ type src struct{
 }
 func main() {
    d, s := dst{}, src{ID:3}
-   fastdeepcopy.Copy(&d, &s).Do()
+   dcopy.Copy(&d, &s).Do()
    fmt.Printf("%#v\n", d)
    
 }
@@ -58,7 +58,7 @@ func main() {
 ## max copy depth
 如果src的结构体嵌套了两套，MaxDepth可以控制只拷贝一层
 ```go
-fastdeepcopy.Copy(&dst{}, &src{}).MaxDepth(1).Do()
+dcopy.Copy(&dst{}, &src{}).MaxDepth(1).Do()
 ```
 
 ## copy only the specified   tag
@@ -69,7 +69,7 @@ package main
 import (
         "fmt"
 
-        "github.com/antlabs/fastdeepcopy"
+        "github.com/antlabs/dcopy"
 )
 
 type dst struct {
@@ -86,7 +86,7 @@ func main() {
         d := dst{}
         s := src{ID: 3, Result: "use tag"}
 
-        fastdeepcopy.Copy(&d, &s).RegisterTagName("copy").Do()
+        dcopy.Copy(&d, &s).RegisterTagName("copy").Do()
 
         fmt.Printf("%#v\n", d)
 }
@@ -99,14 +99,14 @@ package main
 import (
         "fmt"
 
-        "github.com/antlabs/fastdeepcopy"
+        "github.com/antlabs/dcopy"
 )
 
 func main() {
         i := []int{1, 2, 3, 4, 5, 6}
         var o []int
 
-        fastdeepcopy.Copy(&o, &i).Do()
+        dcopy.Copy(&o, &i).Do()
 
         fmt.Printf("%#v\n", o)
 }
@@ -120,7 +120,7 @@ package main
 import (
         "fmt"
 
-        "github.com/antlabs/fastdeepcopy"
+        "github.com/antlabs/dcopy"
 )
 
 func main() {
@@ -132,7 +132,7 @@ func main() {
         }
 
         var o map[string]int
-        fastdeepcopy.Copy(&o, &i).Do()
+        dcopy.Copy(&o, &i).Do()
 
         fmt.Printf("%#v\n", o)
 }
