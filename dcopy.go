@@ -17,7 +17,7 @@ type emptyInterface struct {
 	word unsafe.Pointer
 }
 
-type fastDeepCopy struct {
+type dCopy struct {
 	dstValue reflect.Value
 	srcValue reflect.Value
 	err      error
@@ -28,27 +28,27 @@ type fastDeepCopy struct {
 	af *allFieldFunc
 }
 
-func Copy(dst, src interface{}) *fastDeepCopy {
+func Copy(dst, src interface{}) *dCopy {
 	if dst == nil || src == nil {
-		return &fastDeepCopy{err: errors.New("Unsupported type:nil")}
+		return &dCopy{err: errors.New("Unsupported type:nil")}
 	}
 
 	dstValue := reflect.ValueOf(dst)
 	srcValue := reflect.ValueOf(src)
 
 	if dstValue.Kind() != reflect.Ptr || srcValue.Kind() != reflect.Ptr {
-		return &fastDeepCopy{err: errors.New("Unsupported type: Not a pointer")}
+		return &dCopy{err: errors.New("Unsupported type: Not a pointer")}
 	}
 
 	if !dstValue.Elem().CanAddr() {
-		return &fastDeepCopy{err: fmt.Errorf("dst:%T value cannot take address", dstValue.Type())}
+		return &dCopy{err: fmt.Errorf("dst:%T value cannot take address", dstValue.Type())}
 	}
 
 	if !srcValue.Elem().CanAddr() {
-		return &fastDeepCopy{err: fmt.Errorf("src:%T value cannot take address", dstValue.Type())}
+		return &dCopy{err: fmt.Errorf("src:%T value cannot take address", dstValue.Type())}
 	}
 
-	return &fastDeepCopy{
+	return &dCopy{
 		maxDepth: noDepthLimited,
 		dstValue: dstValue,
 		srcValue: srcValue,
@@ -56,13 +56,13 @@ func Copy(dst, src interface{}) *fastDeepCopy {
 }
 
 // 设置最多递归的层次
-func (f *fastDeepCopy) MaxDepth(maxDepth int) *fastDeepCopy {
+func (f *dCopy) MaxDepth(maxDepth int) *dCopy {
 	f.maxDepth = maxDepth
 	return f
 }
 
 // 设置tag name，结构体的tag等于RegisterTagName注册的tag，才会copy值
-func (f *fastDeepCopy) RegisterTagName(tagName string) *fastDeepCopy {
+func (f *dCopy) RegisterTagName(tagName string) *dCopy {
 	f.tagName = tagName
 	return f
 }
@@ -72,7 +72,7 @@ func haveTagName(curTabName string) bool {
 	return len(curTabName) > 0
 }
 
-func (f *fastDeepCopy) Do() error {
+func (f *dCopy) Do() error {
 	if f.err != nil {
 		return f.err
 	}
@@ -95,10 +95,10 @@ func (f *fastDeepCopy) Do() error {
 		}()
 	}
 
-	return f.fastDeepCopy(arg, 0)
+	return f.dCopy(arg, 0)
 }
 
-func (f *fastDeepCopy) cpyDefault(a *args, depth int) error {
+func (f *dCopy) cpyDefault(a *args, depth int) error {
 
 	dst := a.dstType
 	src := a.srcType
@@ -126,7 +126,7 @@ func (f *fastDeepCopy) cpyDefault(a *args, depth int) error {
 	return nil
 }
 
-func (f *fastDeepCopy) cpyPtr(a *args, depth int) error {
+func (f *dCopy) cpyPtr(a *args, depth int) error {
 	dst := a.dstType
 	src := a.srcType
 
@@ -145,7 +145,7 @@ func (f *fastDeepCopy) cpyPtr(a *args, depth int) error {
 	//dst = dst.Elem()
 	//src = src.Elem()
 
-	return f.fastDeepCopy(arg, depth)
+	return f.dCopy(arg, depth)
 
 }
 
@@ -163,7 +163,7 @@ func getHeader(typ reflect.Type, addr unsafe.Pointer) *reflect.SliceHeader {
 }
 
 // 支持异构copy, slice to slice, array to slice, slice to array
-func (f *fastDeepCopy) cpySliceArray(a *args, depth int) error {
+func (f *dCopy) cpySliceArray(a *args, depth int) error {
 
 	dst := a.dstType
 	src := a.srcType
@@ -218,7 +218,7 @@ func (f *fastDeepCopy) cpySliceArray(a *args, depth int) error {
 					srcOffset: int(elemType.Size()) * i,
 				}
 			}
-			return f.fastDeepCopy(arg, depth)
+			return f.dCopy(arg, depth)
 		}()
 
 		if err != nil {
@@ -244,7 +244,7 @@ func getPtrFromVal(v *reflect.Value) unsafe.Pointer {
 	return ei.word
 }
 
-func (f *fastDeepCopy) cpyMap(a *args, depth int) error {
+func (f *dCopy) cpyMap(a *args, depth int) error {
 	dst := a.dstType
 	src := a.srcType
 	dstAddr := a.dstAddr
@@ -287,7 +287,7 @@ func (f *fastDeepCopy) cpyMap(a *args, depth int) error {
 			arg.dstAddr = getPtrFromVal(&newKey)
 			arg.srcAddr = getPtrFromVal(&k)
 
-			return f.fastDeepCopy(arg, depth)
+			return f.dCopy(arg, depth)
 		}()
 		if err != nil {
 			return err
@@ -303,7 +303,7 @@ func (f *fastDeepCopy) cpyMap(a *args, depth int) error {
 			arg.srcType = v.Type()
 			arg.dstAddr = getPtrFromVal(&newVal)
 			arg.srcAddr = getPtrFromVal(&v)
-			return f.fastDeepCopy(arg, depth)
+			return f.dCopy(arg, depth)
 		}()
 		if err != nil {
 			return err
@@ -315,7 +315,7 @@ func (f *fastDeepCopy) cpyMap(a *args, depth int) error {
 	return nil
 }
 
-func (f *fastDeepCopy) cpyStruct(a *args, depth int) error {
+func (f *dCopy) cpyStruct(a *args, depth int) error {
 
 	dst := a.dstType
 	src := a.srcType
@@ -359,7 +359,7 @@ func (f *fastDeepCopy) cpyStruct(a *args, depth int) error {
 				}
 			}
 
-			return f.fastDeepCopy(arg, depth+1)
+			return f.dCopy(arg, depth+1)
 		}()
 
 		if err != nil {
@@ -370,7 +370,7 @@ func (f *fastDeepCopy) cpyStruct(a *args, depth int) error {
 	return nil
 }
 
-func (f *fastDeepCopy) cpyInterface(a *args, depth int) error {
+func (f *dCopy) cpyInterface(a *args, depth int) error {
 	dst := a.dstType
 	src := a.srcType
 	dstAddr := a.dstAddr
@@ -396,7 +396,7 @@ func (f *fastDeepCopy) cpyInterface(a *args, depth int) error {
 		arg.dstAddr = unsafe.Pointer(newDst.UnsafeAddr())
 		arg.srcAddr = unsafe.Pointer(srcVal.UnsafeAddr())
 
-		if err := f.fastDeepCopy(arg, depth); err != nil {
+		if err := f.dCopy(arg, depth); err != nil {
 			return err
 		}
 	}
@@ -407,7 +407,7 @@ func (f *fastDeepCopy) cpyInterface(a *args, depth int) error {
 	return nil
 }
 
-func (f *fastDeepCopy) fastDeepCopy(a *args, depth int) error {
+func (f *dCopy) dCopy(a *args, depth int) error {
 	if f.err != nil {
 		return f.err
 	}
